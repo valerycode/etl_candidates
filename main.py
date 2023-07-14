@@ -21,11 +21,6 @@ LOADING_SUCCEEDED_MESSAGE = 'Data was successfully loaded in Huntflow system.'
 CHANGE_IN_APPLICANTS_AMOUNT_MESSAGE = ('Applicants amount in system before loading is {amount_before},'
                                        ' after loading the number of applicants in system is {amount_after}.')
 LOADING_APPLICANT_CV_MESSAGE = 'Start loading applicant CV {filename} in system.'
-LOADING_CV_APPLICANT_MESSAGE = 'Response status from API - {status}. Loaded CV with filename {name} in system.'
-LOADING_APPLICANT_MESSAGE = ('Response status from API - {status}.'
-                             ' Loaded applicant with name {last_name} {first_name} in system.')
-LOADING_APPLICANT_TO_VACANCY_MESSAGE = ('Response status from API - {status}. Loaded applicant with id - {applicant_id}'
-                                        ' to vacancy with id - {vacancy_id} in system.')
 
 
 class ETL:
@@ -43,25 +38,16 @@ class ETL:
         count = 0
         cv_files = self.extractor.get_cv_files()
         for db_data in self.extractor.extract_data_from_excel_file(cv_files):
-            logger.debug(LOADING_APPLICANT_MESSAGE.format(name=db_data.get('filename')))
             response = self.loader.upload_cv(
                 account_id, db_data.get('filepath'), db_data.get('filename'), db_data.get('extension'))
-            logger.debug(LOADING_CV_APPLICANT_MESSAGE.format(status=response.status_code, name=db_data.get('filename')))
             cv_data = self.transformer.get_cv_info_from_api_response(response)
             applicant_data = self.transformer.prepare_applicant_data_for_upload(cv_data, db_data)
             response = self.loader.add_applicant(applicant_data, account_id)
-            logger.debug(LOADING_APPLICANT_MESSAGE.format(
-                status=response.status_code, last_name=response.json().get("last_name"),
-                first_name=response.json().get("first_name"))
-            )
             applicant_id = response.json().get('id')
             vacancy_id = self.transformer.get_vacancy_id(vacancies, db_data.get('position'))
             status_id = self.loader.get_status_id(db_data.get('status'), account_id)
             vacancy = self.transformer.prepare_vacancy_data_for_upload(vacancy_id, status_id, db_data.get('comment'))
-            response = self.loader.add_applicant_to_vacancy(vacancy, applicant_id, account_id)
-            logger.debug(LOADING_APPLICANT_TO_VACANCY_MESSAGE.format(
-                status=response.status_code, applicant_id=applicant_id, vacancy_id=vacancy_id)
-            )
+            self.loader.add_applicant_to_vacancy(vacancy, applicant_id, account_id)
             count += 1
         logger.debug(LOAD_MESSAGE.format(applicants_number=count))
         applicants_amount_in_system_after_loading = self.loader.get_applicants_amount(account_id)
